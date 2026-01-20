@@ -1,0 +1,138 @@
+# k3s (Kubernetes) example manifests for counter-deploy
+# - Flask app scaled to 4 replicas (Deployment)
+# - Redis single primary with PVC (Stateful data)
+# - Liveness/Readiness probes replace Swarm healthcheck semantics
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: counter
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: counter-env
+  namespace: counter
+data:
+  FLASK_ENV: "production"
+  PORT: "8000"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  REDIS_DB: "0"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data
+  namespace: counter
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+  # k3s usually ships with local-path as default StorageClass.
+  # storageClassName: local-path
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: counter
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+          ports:
+            - containerPort: 6379
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          livenessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            tcpSocket:
+              port: 6379
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: redis-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: counter
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      port: 6379
+      targetPort: 6379
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: counter-app
+  namespace: counter
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: counter-app
+  template:
+    metadata:
+      labels:
+        app: counter-app
+    spec:
+      containers:
+        - name: app
+          image: counter-app:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: counter-env
+          readinessProbe:
+            httpGet:
+              path: /api/counter
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/counter
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: counter-app
+  namespace: counter
+spec:
+  selector:
+    app: counter-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+  type: NodePort

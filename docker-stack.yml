@@ -1,0 +1,68 @@
+version: "3.8"
+
+# Swarm stack file for counter-deploy
+# Key requirements:
+# - Flask (service "app") runs with 4 replicas
+# - Health checks are defined for services
+# - "DB" tier (Redis) is scaled by adding read replicas (redis_replica)
+
+services:
+  app:
+    # NOTE: docker stack deploy does NOT build images. Build/tag/push the image first.
+    #   docker build -t counter-app:latest .
+    # For multi-node swarms, push to a registry and replace the image name.
+    image: counter-app:latest
+    env_file:
+      - ./backend/.env
+    ports:
+      - "80:8000"
+    networks:
+      - appnet
+    deploy:
+      replicas: 4
+      restart_policy:
+        condition: on-failure
+      update_config:
+        parallelism: 1
+        order: start-first
+    # Healthcheck implemented with Python stdlib (curl is not installed in the image)
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/counter').read()\" || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "60", "1", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    networks:
+      - appnet
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # "Scale DB" safely: add read replicas instead of multiple independent primaries.
+  # The application still points to the primary Redis (service "redis").
+  redis_replica:
+    image: redis:7-alpine
+    command: ["redis-server", "--replicaof", "redis", "6379"]
+    networks:
+      - appnet
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+
+networks:
+  appnet:
+
+volumes:
+  redis_data:
