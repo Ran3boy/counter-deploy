@@ -137,6 +137,7 @@ docker stack deploy -c docker-stack.yml counter
 ```bash
 docker stack ls
 ```
+![05](screens/05_counter_stackls_2.png)
 
 # Документация по сервису счетчика (Docker Swarm)
 
@@ -146,6 +147,7 @@ docker stack ls
 ```bash
 docker stack services counter
 ```
+![05](screens/05_counter_services_3.png)
 
 # Руководство по масштабированию и нагрузочному тестированию приложения Counter
 
@@ -155,6 +157,7 @@ docker stack services counter
 ```bash
 docker service ls
 ```
+![05](screens/05_counter_ps_4.png)
 
 # Лабораторная работа: Масштабирование сервиса Counter
 
@@ -164,6 +167,7 @@ docker service ls
 ```bash
 docker service ps counter_app
 ```
+![05](screens/05_counter_deploy_1.png)
 
 # Нагрузочное тестирование сервиса counter
 
@@ -180,28 +184,19 @@ ApacheBench (`ab`)
 
 ### Прогон A: Тестирование с 1 репликой
 
-#### Масштабирование сервиса
+#### Масштабирование сервиса и запуск нагрузочного теста
 ```bash
 docker service scale counter_app=1
-```
-
-#### Запуск нагрузочного теста:
-
-```bash
 docker run --rm jordi/ab -n 5000 -c 50 http://172.17.0.1/api/counter
 ```
 ![test 1](screens/test_1.jpg)
 
 # Прогон B: Тестирование с 4 репликами
 
-## Восстановление масштаба сервиса
+## Восстановление масштаба сервиса и повторный нагрузочный тест
 
 ```bash
 docker service scale counter_app=4
-```
-
-## Повторный нагрузочный тест
-```bash
 docker run --rm jordi/ab -n 5000 -c 50 http://172.17.0.1/api/counter
 ```
 ![test 2](screens/test_2.jpg)
